@@ -26,7 +26,6 @@ interface SessionState {
   error: string | null;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const ROLES = ["The Analyst", "The Reasoner", "The Challenger", "The Maverick"];
 
 export function useCouncilSession() {
@@ -52,7 +51,7 @@ export function useCouncilSession() {
       error: null,
     });
 
-    const url = `${API_BASE}/api/sessions/stream?question=${encodeURIComponent(question)}&tier=${tier}`;
+    const url = `/api/sessions/stream?question=${encodeURIComponent(question)}&tier=${tier}`;
     const es = new EventSource(url);
     eventSourceRef.current = es;
 

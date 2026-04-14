@@ -6,8 +6,6 @@ import { Navbar } from "@/components/Navbar";
 import { GridSection } from "@/components/GridSection";
 import { SidebarLabel } from "@/components/SidebarLabel";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 interface SessionSummary {
   id: string;
   question: string;
@@ -21,7 +19,7 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/sessions?limit=50`)
+    fetch(`/api/sessions?limit=50`)
       .then((r) => r.json())
       .then((data) => {
         setSessions(data.sessions || []);

@@ -9,7 +9,6 @@ import { ModelCard } from "@/components/ModelCard";
 import { VerdictPanel } from "@/components/VerdictPanel";
 import { useCouncilSession } from "@/hooks/useCouncilSession";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const ROUND_LABELS = ["OPENING STATEMENTS", "CROSS-EXAMINATION", "FINAL ARGUMENTS"];
 const ROLES = ["The Analyst", "The Reasoner", "The Challenger", "The Maverick"];
 
@@ -53,7 +52,7 @@ function SessionContent() {
   useEffect(() => {
     if (!sessionId) return;
     setLoadingHistory(true);
-    fetch(`${API_BASE}/api/sessions/${sessionId}`)
+    fetch(`/api/sessions/${sessionId}`)
       .then((r) => r.json())
       .then((data: SavedSession) => {
         setSavedSession(data);
