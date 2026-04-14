@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+:root {
+  --color-bg: #E3E2DE;
+  --color-accent: #1351AA;
+  --color-text: #141414;
+  --color-text-secondary: #444343;
+  --color-text-muted: #7A7A7A;
+  --color-border: #C7C7C7;
+  --color-white: #FFFFFF;
+  --color-bg-hover: rgba(255, 255, 255, 0.2);
+  --color-bg-muted: #F0EFEB;
+
+  --font-sans: 'General Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 1.125rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Poster Modernist: No border radius anywhere */
+*:not(.confidence-badge) {
+  border-radius: 0 !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+}
