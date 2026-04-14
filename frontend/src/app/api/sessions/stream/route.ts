@@ -2,6 +2,7 @@ import { type NextRequest } from "next/server";
 import { COUNCIL_MODELS, ROLE_KEYS, type Tier } from "@/lib/council-config";
 import { buildSystemPrompt, formatTranscript, CHAIRPERSON_PROMPT } from "@/lib/prompts";
 import { streamModelResponse } from "@/lib/openrouter";
+import { saveSessionToD1 } from "@/lib/d1";
 import { randomUUID } from "crypto";
 
 export const maxDuration = 300;
@@ -128,10 +129,44 @@ export async function GET(request: NextRequest) {
           else if (confSection.includes("LOW")) confidence = "low";
         }
 
+        const totalDuration = Date.now() - sessionStart;
+        const createdAt = new Date().toISOString();
+
+        // Save to Cloudflare D1
+        const dbResponses: Array<{
+          id: string; session_id: string; round: number; model_id: string;
+          role_name: string; content: string; latency_ms: number; created_at: string;
+        }> = [];
+        for (const [roundIdx, roundResps] of allRoundResponses.entries()) {
+          for (const resp of roundResps) {
+            dbResponses.push({
+              id: randomUUID(), session_id: sessionId, round: roundIdx + 1,
+              model_id: resp.model_id, role_name: resp.role_name,
+              content: resp.content, latency_ms: resp.latency_ms, created_at: createdAt,
+            });
+          }
+        }
+        // Add verdict as round 4
+        dbResponses.push({
+          id: randomUUID(), session_id: sessionId, round: 4,
+          model_id: chairModelId, role_name: "Chairperson",
+          content: verdictContent, latency_ms: 0, created_at: createdAt,
+        });
+
+        try {
+          await saveSessionToD1({
+            id: sessionId, question, tier, confidence,
+            duration_ms: totalDuration, verdict_full: verdictContent,
+            created_at: createdAt, responses: dbResponses,
+          });
+        } catch (dbErr) {
+          console.error("D1 save failed:", dbErr);
+        }
+
         send("session_complete", {
           session_id: sessionId,
           confidence,
-          duration_ms: Date.now() - sessionStart,
+          duration_ms: totalDuration,
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

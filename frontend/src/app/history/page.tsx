@@ -5,15 +5,29 @@ import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { GridSection } from "@/components/GridSection";
 import { SidebarLabel } from "@/components/SidebarLabel";
-import { loadAllSessions, downloadCSV, type StoredSession } from "@/lib/session-storage";
+
+interface SessionSummary {
+  id: string;
+  question: string;
+  tier: string;
+  status: string;
+  confidence: string | null;
+  duration_ms: number | null;
+  created_at: string;
+}
 
 export default function HistoryPage() {
-  const [sessions, setSessions] = useState<StoredSession[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setSessions(loadAllSessions());
-    setLoaded(true);
+    fetch("/api/sessions?limit=50")
+      .then((r) => r.json())
+      .then((data) => {
+        setSessions(data.sessions || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   return (
@@ -31,16 +45,17 @@ export default function HistoryPage() {
               SESSIONS
             </h1>
             {sessions.length > 0 && (
-              <button
-                onClick={downloadCSV}
-                className="px-5 py-2.5 text-xs font-bold uppercase tracking-wider bg-[#141414] text-[#E3E2DE] cursor-pointer hover:bg-[#333] transition-colors"
+              <a
+                href="/api/sessions/csv"
+                download
+                className="px-5 py-2.5 text-xs font-bold uppercase tracking-wider bg-[#141414] text-[#E3E2DE] cursor-pointer hover:bg-[#333] transition-colors no-underline"
               >
                 Download CSV
-              </button>
+              </a>
             )}
           </div>
 
-          {!loaded ? (
+          {loading ? (
             <p className="text-sm text-[#7A7A7A]">Loading...</p>
           ) : sessions.length === 0 ? (
             <p className="text-sm text-[#7A7A7A]">
@@ -71,7 +86,7 @@ export default function HistoryPage() {
                       {s.confidence && (
                         <span className="uppercase">{s.confidence} confidence</span>
                       )}
-                      {s.duration_ms > 0 && (
+                      {s.duration_ms && s.duration_ms > 0 && (
                         <span>{(s.duration_ms / 1000).toFixed(1)}s</span>
                       )}
                     </div>

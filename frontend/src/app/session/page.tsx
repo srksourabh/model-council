@@ -8,7 +8,6 @@ import { SidebarLabel } from "@/components/SidebarLabel";
 import { ModelCard } from "@/components/ModelCard";
 import { VerdictPanel } from "@/components/VerdictPanel";
 import { useCouncilSession } from "@/hooks/useCouncilSession";
-import { loadSession } from "@/lib/session-storage";
 
 const ROUND_LABELS = ["OPENING STATEMENTS", "CROSS-EXAMINATION", "FINAL ARGUMENTS"];
 const ROLES = ["The Analyst", "The Reasoner", "The Challenger", "The Maverick"];
@@ -49,29 +48,31 @@ function SessionContent() {
   const [savedRounds, setSavedRounds] = useState<SavedRound[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  // Load saved session from localStorage if ?id= is present
+  // Load saved session from D1 via API if ?id= is present
   useEffect(() => {
     if (!sessionId) return;
     setLoadingHistory(true);
-    const data = loadSession(sessionId);
-    if (data) {
-      setSavedSession(data);
-      const roundsMap: Record<number, SavedRound> = {};
-      for (const resp of data.responses || []) {
-        if (resp.round === 4) continue; // verdict is separate
-        if (!roundsMap[resp.round]) {
-          roundsMap[resp.round] = { round: resp.round, responses: {} };
+    fetch(`/api/sessions/${sessionId}`)
+      .then((r) => r.json())
+      .then((data: SavedSession) => {
+        setSavedSession(data);
+        const roundsMap: Record<number, SavedRound> = {};
+        for (const resp of data.responses || []) {
+          if (resp.round === 4) continue;
+          if (!roundsMap[resp.round]) {
+            roundsMap[resp.round] = { round: resp.round, responses: {} };
+          }
+          roundsMap[resp.round].responses[resp.role_name] = {
+            model: resp.model_id,
+            role: resp.role_name,
+            content: resp.content,
+            latency_ms: resp.latency_ms,
+          };
         }
-        roundsMap[resp.round].responses[resp.role_name] = {
-          model: resp.model_id,
-          role: resp.role_name,
-          content: resp.content,
-          latency_ms: resp.latency_ms,
-        };
-      }
-      setSavedRounds(Object.values(roundsMap).sort((a, b) => a.round - b.round));
-    }
-    setLoadingHistory(false);
+        setSavedRounds(Object.values(roundsMap).sort((a, b) => a.round - b.round));
+        setLoadingHistory(false);
+      })
+      .catch(() => setLoadingHistory(false));
   }, [sessionId]);
 
   // Start live session if ?q= is present
