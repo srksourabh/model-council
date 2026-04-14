@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { GridSection } from "@/components/GridSection";
@@ -9,77 +9,167 @@ import { ModelCard } from "@/components/ModelCard";
 import { VerdictPanel } from "@/components/VerdictPanel";
 import { useCouncilSession } from "@/hooks/useCouncilSession";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const ROUND_LABELS = ["OPENING STATEMENTS", "CROSS-EXAMINATION", "FINAL ARGUMENTS"];
 const ROLES = ["The Analyst", "The Reasoner", "The Challenger", "The Maverick"];
+
+interface SavedRound {
+  round: number;
+  responses: Record<string, { model: string; role: string; content: string; latency_ms?: number }>;
+}
+
+interface SavedSession {
+  id: string;
+  question: string;
+  tier: string;
+  status: string;
+  confidence: string;
+  duration_ms: number;
+  verdict_full: string;
+  responses: Array<{
+    round: number;
+    model_id: string;
+    role_name: string;
+    content: string;
+    latency_ms: number;
+  }>;
+}
 
 function SessionContent() {
   const searchParams = useSearchParams();
   const question = searchParams.get("q") || "";
+  const sessionId = searchParams.get("id") || "";
   const tier = searchParams.get("tier") || "frontier";
+
+  // Live session state (for new debates)
   const session = useCouncilSession();
 
+  // Saved session state (for history playback)
+  const [savedSession, setSavedSession] = useState<SavedSession | null>(null);
+  const [savedRounds, setSavedRounds] = useState<SavedRound[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Load saved session if ?id= is present
   useEffect(() => {
-    if (question && session.status === "idle") {
+    if (!sessionId) return;
+    setLoadingHistory(true);
+    fetch(`${API_BASE}/api/sessions/${sessionId}`)
+      .then((r) => r.json())
+      .then((data: SavedSession) => {
+        setSavedSession(data);
+        // Group responses by round
+        const roundsMap: Record<number, SavedRound> = {};
+        for (const resp of data.responses || []) {
+          if (resp.round === 4) continue; // verdict is separate
+          if (!roundsMap[resp.round]) {
+            roundsMap[resp.round] = { round: resp.round, responses: {} };
+          }
+          roundsMap[resp.round].responses[resp.role_name] = {
+            model: resp.model_id,
+            role: resp.role_name,
+            content: resp.content,
+            latency_ms: resp.latency_ms,
+          };
+        }
+        setSavedRounds(Object.values(roundsMap).sort((a, b) => a.round - b.round));
+        setLoadingHistory(false);
+      })
+      .catch(() => setLoadingHistory(false));
+  }, [sessionId]);
+
+  // Start live session if ?q= is present
+  useEffect(() => {
+    if (question && !sessionId && session.status === "idle") {
       session.startSession(question, tier);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [question]);
+  }, [question, sessionId]);
+
+  // Determine if we're showing a saved session or a live one
+  const isHistoryView = !!sessionId && !!savedSession;
+
+  const displayQuestion = isHistoryView ? savedSession.question : question;
+  const displayTier = isHistoryView ? savedSession.tier : tier;
+  const displayStatus = isHistoryView ? savedSession.status : session.status;
+  const displayDuration = isHistoryView ? savedSession.duration_ms : session.durationMs;
+  const displaySessionId = isHistoryView ? savedSession.id : session.sessionId;
+  const displayConfidence = isHistoryView ? savedSession.confidence : session.confidence;
+  const displayVerdict = isHistoryView ? (savedSession.verdict_full || "") : session.verdict;
+  const displayRounds = isHistoryView ? savedRounds : session.rounds;
 
   const currentRoundNum =
     session.status === "round_1" ? 1 :
     session.status === "round_2" ? 2 :
     session.status === "round_3" ? 3 : 0;
 
+  if (loadingHistory) {
+    return (
+      <>
+        <Navbar />
+        <div className="flex h-[80vh] items-center justify-center">
+          <p className="text-[#7A7A7A] text-sm uppercase tracking-wider">Loading session...</p>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <Navbar />
 
       {/* Progress bar */}
-      <div className="h-0.5 bg-[#C7C7C7]">
-        <div
-          className="h-full bg-[#1351AA] transition-all duration-500"
-          style={{
-            width:
-              session.status === "idle" ? "0%" :
-              session.status === "connecting" ? "2%" :
-              session.status === "round_1" ? "20%" :
-              session.status === "round_2" ? "45%" :
-              session.status === "round_3" ? "70%" :
-              session.status === "verdict" ? "85%" :
-              "100%",
-          }}
-        />
-      </div>
+      {!isHistoryView && (
+        <div className="h-0.5 bg-[#C7C7C7]">
+          <div
+            className="h-full bg-[#1351AA] transition-all duration-500"
+            style={{
+              width:
+                session.status === "idle" ? "0%" :
+                session.status === "connecting" ? "2%" :
+                session.status === "round_1" ? "20%" :
+                session.status === "round_2" ? "45%" :
+                session.status === "round_3" ? "70%" :
+                session.status === "verdict" ? "85%" :
+                "100%",
+            }}
+          />
+        </div>
+      )}
 
       {/* Question header */}
       <GridSection>
         <div className="col-span-12 lg:col-span-3">
-          <SidebarLabel meta={session.sessionId ? `#${session.sessionId.slice(0, 8)}` : undefined}>
+          <SidebarLabel meta={displaySessionId ? `#${displaySessionId.slice(0, 8)}` : undefined}>
             Question
           </SidebarLabel>
         </div>
         <div className="col-span-12 lg:col-span-9">
           <h1 className="text-2xl lg:text-4xl font-bold leading-tight text-[#141414]">
-            &ldquo;{question}&rdquo;
+            &ldquo;{displayQuestion}&rdquo;
           </h1>
           <div className="mt-3 flex gap-4 text-xs text-[#7A7A7A]">
-            <span className="font-mono uppercase">Tier: {tier}</span>
-            {session.status !== "idle" && session.status !== "connecting" && (
-              <span className="font-mono uppercase">Status: {session.status.replace("_", " ")}</span>
+            <span className="font-mono uppercase">Tier: {displayTier}</span>
+            {displayStatus !== "idle" && displayStatus !== "connecting" && (
+              <span className="font-mono uppercase">Status: {displayStatus.replace("_", " ")}</span>
             )}
-            {session.durationMs > 0 && (
-              <span className="font-mono">Duration: {(session.durationMs / 1000).toFixed(1)}s</span>
+            {displayDuration > 0 && (
+              <span className="font-mono">Duration: {(displayDuration / 1000).toFixed(1)}s</span>
             )}
           </div>
         </div>
       </GridSection>
 
       {/* Debate rounds */}
-      {session.rounds.map((round) => (
+      {displayRounds.map((round) => (
         <GridSection key={round.round}>
           <div className="col-span-12 lg:col-span-3">
             <SidebarLabel
-              meta={round.complete ? "Complete" : currentRoundNum === round.round ? "In progress..." : undefined}
+              meta={
+                isHistoryView ? "Complete" :
+                ("complete" in round && round.complete) ? "Complete" :
+                currentRoundNum === round.round ? "In progress..." :
+                undefined
+              }
             >
               {`Round ${String(round.round).padStart(2, "0")}`}
               <br />
@@ -95,7 +185,7 @@ function SessionContent() {
                   role={role}
                   model={resp?.model || ""}
                   content={resp?.content || ""}
-                  complete={resp?.complete || false}
+                  complete={isHistoryView ? true : ("complete" in resp ? (resp as { complete: boolean }).complete : false)}
                   latencyMs={resp?.latency_ms}
                 />
               );
@@ -104,26 +194,26 @@ function SessionContent() {
         </GridSection>
       ))}
 
-      {/* Verdict — show if we have verdict content OR status is verdict/complete */}
-      {(session.status === "verdict" || session.status === "complete" || session.verdict) && (
+      {/* Verdict */}
+      {(displayStatus === "verdict" || displayStatus === "complete" || displayVerdict) && (
         <GridSection>
           <div className="col-span-12 lg:col-span-3">
-            <SidebarLabel meta={session.status === "complete" ? "Final" : "Synthesizing..."}>
+            <SidebarLabel meta={displayStatus === "complete" ? "Final" : "Synthesizing..."}>
               Verdict
             </SidebarLabel>
           </div>
           <div className="col-span-12 lg:col-span-9">
             <VerdictPanel
-              content={session.verdict}
-              confidence={session.confidence}
-              complete={session.status === "complete"}
+              content={displayVerdict}
+              confidence={displayConfidence}
+              complete={displayStatus === "complete"}
             />
           </div>
         </GridSection>
       )}
 
       {/* Error */}
-      {session.status === "error" && (
+      {session.status === "error" && !isHistoryView && (
         <GridSection>
           <div className="col-span-12 lg:col-span-3">
             <SidebarLabel>Error</SidebarLabel>

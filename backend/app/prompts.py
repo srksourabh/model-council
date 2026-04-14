@@ -69,33 +69,27 @@ Rules:
 }
 
 ROUND_PROMPTS = {
-    1: "\n\nKeep your response focused and substantive (500-800 words).",
+    1: "\n\nCRITICAL: Your response MUST be 100 words or fewer. Be concise and decisive. No filler.",
     2: """\n\nROUND 2 INSTRUCTIONS:
 You have now read all four council members' opening statements.
 
 In this round you MUST:
 1. Directly address at least TWO other members by role name
-2. Identify the strongest point made by another member and explain why it's strong
-3. Challenge at least ONE claim you believe is wrong, weakly supported, or misleading
-4. Refine your own position based on what you've learned — show how your thinking evolved
-5. Do NOT simply summarize Round 1 — add NEW reasoning, evidence, or perspective
+2. Challenge at least ONE claim you believe is wrong or weakly supported
+3. Refine your own position based on what you've learned
 
 Format: Address other members directly. Example: "The Analyst claims X, but this overlooks..."
 
-Keep your response focused (400-600 words).""",
+CRITICAL: Your response MUST be 100 words or fewer. Be concise and decisive. No filler.""",
     3: """\n\nROUND 3 INSTRUCTIONS:
-This is your FINAL statement to the council. Two full rounds of debate have occurred.
+This is your FINAL statement to the council.
 
 In this round you MUST:
-1. State your FINAL position clearly and decisively in the first paragraph
-2. Acknowledge the strongest argument made against your position during the debate
-3. Explain why you hold your position despite that counterargument (or why you changed your mind)
-4. Identify areas of consensus — what do all or most members agree on?
-5. Flag any irreconcilable disagreements with a clear "I disagree because..."
+1. State your FINAL position clearly in the first sentence
+2. Acknowledge the strongest counterargument and why you still hold your position
+3. Identify areas of consensus
 
-If the council has reached consensus: say so explicitly and state what was agreed.
-If you changed your position during the debate: explain what persuaded you.
-Keep this response concise (300-500 words). The debate is concluding.""",
+CRITICAL: Your response MUST be 100 words or fewer. Be concise and decisive. No filler.""",
 }
 
 CHAIRPERSON_PROMPT = """You are the CHAIRPERSON of this council. You did NOT participate in the debate.

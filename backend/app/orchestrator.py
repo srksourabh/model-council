@@ -20,7 +20,7 @@ async def _collect_response(
     start = time.time()
 
     try:
-        async for text in stream_model_response(model_id, system_prompt, user_content):
+        async for text in stream_model_response(model_id, system_prompt, user_content, max_tokens=200):
             chunks.append(text)
     except Exception as e:
         return {
