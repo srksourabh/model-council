@@ -4,7 +4,8 @@ import uuid
 from datetime import datetime, timezone
 import aiosqlite
 
-DB_PATH = "council.db"
+import os
+DB_PATH = os.getenv("DATABASE_PATH", "council.db")
 
 
 async def init_db():

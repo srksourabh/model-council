@@ -24,7 +24,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://modelcouncil.ai"],
+    allow_origins=["http://localhost:3000", "https://modelcouncil.ai", "https://*.vercel.app"],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
