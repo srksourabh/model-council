@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import { saveSession, type StoredResponse } from "@/lib/session-storage";
 
 interface ModelResponse {
   model: string;
@@ -39,8 +40,13 @@ export function useCouncilSession() {
     error: null,
   });
   const eventSourceRef = useRef<EventSource | null>(null);
+  const questionRef = useRef("");
+  const tierRef = useRef("frontier");
 
   const startSession = useCallback((question: string, tier: string = "frontier") => {
+    questionRef.current = question;
+    tierRef.current = tier;
+
     setState({
       sessionId: null,
       status: "connecting",
@@ -64,7 +70,6 @@ export function useCouncilSession() {
       const data = JSON.parse((e as MessageEvent).data);
       const roundNum = data.round;
       setState((prev) => {
-        // Prevent duplicate rounds (SSE can retry)
         if (prev.rounds.some((r) => r.round === roundNum)) {
           return { ...prev, status: `round_${roundNum}` as SessionState["status"] };
         }
@@ -137,7 +142,50 @@ export function useCouncilSession() {
 
     es.addEventListener("session_complete", (e) => {
       const data = JSON.parse((e as MessageEvent).data);
-      setState((prev) => ({ ...prev, status: "complete", confidence: data.confidence, durationMs: data.duration_ms }));
+      setState((prev) => {
+        const completed = { ...prev, status: "complete" as const, confidence: data.confidence, durationMs: data.duration_ms };
+
+        // Save to localStorage
+        const responses: StoredResponse[] = [];
+        for (const round of completed.rounds) {
+          for (const role of ROLES) {
+            const resp = round.responses[role];
+            if (resp && resp.content) {
+              responses.push({
+                round: round.round,
+                model_id: resp.model,
+                role_name: resp.role,
+                content: resp.content,
+                latency_ms: resp.latency_ms || 0,
+              });
+            }
+          }
+        }
+        // Add verdict as round 4
+        if (completed.verdict) {
+          responses.push({
+            round: 4,
+            model_id: "chairperson",
+            role_name: "Chairperson",
+            content: completed.verdict,
+            latency_ms: 0,
+          });
+        }
+
+        saveSession({
+          id: completed.sessionId || data.session_id,
+          question: questionRef.current,
+          tier: tierRef.current,
+          status: "complete",
+          confidence: data.confidence,
+          duration_ms: data.duration_ms,
+          verdict_full: completed.verdict,
+          created_at: new Date().toISOString(),
+          responses,
+        });
+
+        return completed;
+      });
       es.close();
     });
 
@@ -147,8 +195,6 @@ export function useCouncilSession() {
     });
 
     es.onerror = () => {
-      // Don't overwrite a completed session — SSE naturally closes after session_complete
-      // and EventSource treats that as an "error"
       setState((prev) => {
         if (prev.status === "complete") return prev;
         return { ...prev, status: "error", error: "Connection lost. Please try again." };

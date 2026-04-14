@@ -5,27 +5,15 @@ import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { GridSection } from "@/components/GridSection";
 import { SidebarLabel } from "@/components/SidebarLabel";
-
-interface SessionSummary {
-  id: string;
-  question: string;
-  status: string;
-  confidence: string | null;
-  created_at: string;
-}
+import { loadAllSessions, downloadCSV, type StoredSession } from "@/lib/session-storage";
 
 export default function HistoryPage() {
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sessions, setSessions] = useState<StoredSession[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/sessions?limit=50`)
-      .then((r) => r.json())
-      .then((data) => {
-        setSessions(data.sessions || []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    setSessions(loadAllSessions());
+    setLoaded(true);
   }, []);
 
   return (
@@ -36,13 +24,23 @@ export default function HistoryPage() {
           <SidebarLabel>History</SidebarLabel>
         </div>
         <div className="col-span-12 lg:col-span-9">
-          <h1 className="text-5xl font-bold leading-[0.9] tracking-[-0.03em] mb-12">
-            PAST
-            <br />
-            SESSIONS
-          </h1>
+          <div className="flex items-start justify-between mb-12">
+            <h1 className="text-5xl font-bold leading-[0.9] tracking-[-0.03em]">
+              PAST
+              <br />
+              SESSIONS
+            </h1>
+            {sessions.length > 0 && (
+              <button
+                onClick={downloadCSV}
+                className="px-5 py-2.5 text-xs font-bold uppercase tracking-wider bg-[#141414] text-[#E3E2DE] cursor-pointer hover:bg-[#333] transition-colors"
+              >
+                Download CSV
+              </button>
+            )}
+          </div>
 
-          {loading ? (
+          {!loaded ? (
             <p className="text-sm text-[#7A7A7A]">Loading...</p>
           ) : sessions.length === 0 ? (
             <p className="text-sm text-[#7A7A7A]">
@@ -68,9 +66,13 @@ export default function HistoryPage() {
                     </h3>
                     <div className="mt-1 flex gap-4 text-xs text-[#7A7A7A]">
                       <span>{new Date(s.created_at).toLocaleDateString()}</span>
+                      <span className="uppercase">{s.tier}</span>
                       <span className="uppercase">{s.status}</span>
                       {s.confidence && (
-                        <span className="uppercase">{s.confidence}</span>
+                        <span className="uppercase">{s.confidence} confidence</span>
+                      )}
+                      {s.duration_ms > 0 && (
+                        <span>{(s.duration_ms / 1000).toFixed(1)}s</span>
                       )}
                     </div>
                   </div>
