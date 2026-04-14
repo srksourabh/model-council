@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import { saveSession, type StoredResponse } from "@/lib/session-storage";
 
 interface ModelResponse {
   model: string;
@@ -29,6 +28,20 @@ interface SessionState {
 
 const ROLES = ["The Analyst", "The Reasoner", "The Challenger", "The Maverick"];
 
+function formatTranscript(
+  rounds: Array<{ round: number; responses: Array<{ role_name: string; content: string }> }>,
+): string {
+  return rounds
+    .map((r) => {
+      const lines = [`--- ROUND ${r.round} ---`];
+      for (const resp of r.responses) {
+        lines.push(`\n### ${resp.role_name}:\n${resp.content}\n`);
+      }
+      return lines.join("\n");
+    })
+    .join("\n");
+}
+
 export function useCouncilSession() {
   const [state, setState] = useState<SessionState>({
     sessionId: null,
@@ -39,16 +52,14 @@ export function useCouncilSession() {
     durationMs: 0,
     error: null,
   });
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const questionRef = useRef("");
-  const tierRef = useRef("frontier");
+  const abortRef = useRef<AbortController | null>(null);
 
   const startSession = useCallback((question: string, tier: string = "frontier") => {
-    questionRef.current = question;
-    tierRef.current = tier;
+    const sessionId = crypto.randomUUID();
+    const sessionStart = Date.now();
 
     setState({
-      sessionId: null,
+      sessionId,
       status: "connecting",
       rounds: [],
       verdict: "",
@@ -57,156 +68,157 @@ export function useCouncilSession() {
       error: null,
     });
 
-    const url = `/api/sessions/stream?question=${encodeURIComponent(question)}&tier=${tier}`;
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
+    const controller = new AbortController();
+    abortRef.current = controller;
 
-    es.addEventListener("session_start", (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
-      setState((prev) => ({ ...prev, sessionId: data.session_id }));
-    });
+    (async () => {
+      try {
+        const allRoundData: Array<{
+          round: number;
+          responses: Array<{ model_id: string; role_name: string; content: string; latency_ms: number }>;
+        }> = [];
 
-    es.addEventListener("round_start", (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
-      const roundNum = data.round;
-      setState((prev) => {
-        if (prev.rounds.some((r) => r.round === roundNum)) {
-          return { ...prev, status: `round_${roundNum}` as SessionState["status"] };
-        }
-        const newRound: RoundData = { round: roundNum, responses: {}, complete: false };
-        for (const role of ROLES) {
-          newRound.responses[role] = { model: "", role, content: "", complete: false };
-        }
-        return {
-          ...prev,
-          status: `round_${roundNum}` as SessionState["status"],
-          rounds: [...prev.rounds, newRound],
-        };
-      });
-    });
+        // Run 3 rounds sequentially
+        for (let roundNum = 1; roundNum <= 3; roundNum++) {
+          if (controller.signal.aborted) return;
 
-    es.addEventListener("model_chunk", (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
-      setState((prev) => {
-        const rounds = prev.rounds.map((r, i) => {
-          if (i !== prev.rounds.length - 1) return r;
-          const resp = r.responses[data.role] || { model: data.model, role: data.role, content: "", complete: false };
-          return {
-            ...r,
-            responses: {
-              ...r.responses,
-              [data.role]: { ...resp, model: data.model, content: resp.content + data.text },
-            },
-          };
-        });
-        return { ...prev, rounds };
-      });
-    });
-
-    es.addEventListener("model_complete", (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
-      setState((prev) => {
-        const rounds = prev.rounds.map((r, i) => {
-          if (i !== prev.rounds.length - 1) return r;
-          if (!r.responses[data.role]) return r;
-          return {
-            ...r,
-            responses: {
-              ...r.responses,
-              [data.role]: { ...r.responses[data.role], complete: true, latency_ms: data.latency_ms },
-            },
-          };
-        });
-        return { ...prev, rounds };
-      });
-    });
-
-    es.addEventListener("round_complete", (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
-      setState((prev) => {
-        const rounds = prev.rounds.map((r) =>
-          r.round === data.round ? { ...r, complete: true } : r
-        );
-        return { ...prev, rounds };
-      });
-    });
-
-    es.addEventListener("verdict_start", () => {
-      setState((prev) => ({ ...prev, status: "verdict" }));
-    });
-
-    es.addEventListener("verdict_chunk", (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
-      setState((prev) => ({ ...prev, verdict: prev.verdict + data.text }));
-    });
-
-    es.addEventListener("session_complete", (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
-      setState((prev) => {
-        const completed = { ...prev, status: "complete" as const, confidence: data.confidence, durationMs: data.duration_ms };
-
-        // Save to localStorage
-        const responses: StoredResponse[] = [];
-        for (const round of completed.rounds) {
-          for (const role of ROLES) {
-            const resp = round.responses[role];
-            if (resp && resp.content) {
-              responses.push({
-                round: round.round,
-                model_id: resp.model,
-                role_name: resp.role,
-                content: resp.content,
-                latency_ms: resp.latency_ms || 0,
-              });
+          // Show round starting with empty cards
+          setState((prev) => {
+            const newRound: RoundData = { round: roundNum, responses: {}, complete: false };
+            for (const role of ROLES) {
+              newRound.responses[role] = { model: "", role, content: "", complete: false };
             }
-          }
-        }
-        // Add verdict as round 4
-        if (completed.verdict) {
-          responses.push({
-            round: 4,
-            model_id: "chairperson",
-            role_name: "Chairperson",
-            content: completed.verdict,
-            latency_ms: 0,
+            return {
+              ...prev,
+              status: `round_${roundNum}` as SessionState["status"],
+              rounds: [...prev.rounds, newRound],
+            };
+          });
+
+          const transcript = formatTranscript(allRoundData);
+
+          const res = await fetch("/api/sessions/round", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question, tier, round: roundNum, transcript }),
+            signal: controller.signal,
+          });
+
+          if (!res.ok) throw new Error(`Round ${roundNum} failed: ${res.status}`);
+          const data = await res.json();
+
+          allRoundData.push({ round: roundNum, responses: data.responses });
+
+          // Update state with completed round
+          setState((prev) => {
+            const rounds = prev.rounds.map((r) => {
+              if (r.round !== roundNum) return r;
+              const responses: Record<string, ModelResponse> = {};
+              for (const resp of data.responses) {
+                responses[resp.role_name] = {
+                  model: resp.model_id,
+                  role: resp.role_name,
+                  content: resp.content,
+                  latency_ms: resp.latency_ms,
+                  complete: true,
+                };
+              }
+              return { ...r, responses, complete: true };
+            });
+            return { ...prev, rounds };
           });
         }
 
-        saveSession({
-          id: completed.sessionId || data.session_id,
-          question: questionRef.current,
-          tier: tierRef.current,
-          status: "complete",
-          confidence: data.confidence,
-          duration_ms: data.duration_ms,
-          verdict_full: completed.verdict,
-          created_at: new Date().toISOString(),
-          responses,
+        if (controller.signal.aborted) return;
+
+        // Verdict phase — stream it
+        setState((prev) => ({ ...prev, status: "verdict" }));
+
+        const fullTranscript = formatTranscript(allRoundData);
+        const verdictRes = await fetch("/api/sessions/verdict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, tier, transcript: fullTranscript }),
+          signal: controller.signal,
         });
 
-        return completed;
-      });
-      es.close();
-    });
+        if (!verdictRes.ok) throw new Error(`Verdict failed: ${verdictRes.status}`);
 
-    es.addEventListener("model_error", (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
-      console.error("Model error:", data);
-    });
+        const reader = verdictRes.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let fullVerdict = "";
 
-    es.onerror = () => {
-      setState((prev) => {
-        if (prev.status === "complete") return prev;
-        return { ...prev, status: "error", error: "Connection lost. Please try again." };
-      });
-      es.close();
-    };
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-    return () => { es.close(); };
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const payload = line.slice(6).trim();
+            if (payload === "[DONE]") break;
+            try {
+              const chunk = JSON.parse(payload);
+              if (chunk.text) {
+                fullVerdict += chunk.text;
+                setState((prev) => ({ ...prev, verdict: prev.verdict + chunk.text }));
+              }
+            } catch {
+              continue;
+            }
+          }
+        }
+
+        // Extract confidence
+        let confidence = "medium";
+        if (fullVerdict.includes("## Confidence")) {
+          const confSection = fullVerdict.split("## Confidence")[1]?.slice(0, 200).toUpperCase() || "";
+          if (confSection.includes("HIGH")) confidence = "high";
+          else if (confSection.includes("LOW")) confidence = "low";
+        }
+
+        const totalDuration = Date.now() - sessionStart;
+
+        setState((prev) => ({
+          ...prev,
+          status: "complete",
+          confidence,
+          durationMs: totalDuration,
+        }));
+
+        // Save to D1 in background
+        fetch("/api/sessions/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: sessionId,
+            question,
+            tier,
+            confidence,
+            duration_ms: totalDuration,
+            verdict_full: fullVerdict,
+            rounds: allRoundData,
+          }),
+        }).catch(() => {});
+      } catch (e) {
+        if (controller.signal.aborted) return;
+        setState((prev) => ({
+          ...prev,
+          status: "error",
+          error: e instanceof Error ? e.message : "Connection lost. Please try again.",
+        }));
+      }
+    })();
+
+    return () => { controller.abort(); };
   }, []);
 
   const stopSession = useCallback(() => {
-    eventSourceRef.current?.close();
+    abortRef.current?.abort();
     setState((prev) => ({ ...prev, status: "idle" }));
   }, []);
 

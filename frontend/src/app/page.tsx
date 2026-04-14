@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/Navbar";
 import { PosterButton } from "@/components/PosterButton";
 import { SidebarLabel } from "@/components/SidebarLabel";
 import { GridSection } from "@/components/GridSection";
 
-const EXAMPLE_QUESTIONS = [
+const FALLBACK_QUESTIONS = [
   "Is remote work better for productivity than office work?",
   "Should startups prioritize revenue or growth in 2026?",
   "Will AI replace software engineers within 10 years?",
@@ -43,7 +43,17 @@ const DIFFERENTIATORS = [
 
 export default function Home() {
   const [question, setQuestion] = useState("");
+  const [topics, setTopics] = useState<string[]>(FALLBACK_QUESTIONS);
   const router = useRouter();
+
+  useEffect(() => {
+    fetch("/api/topics")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.topics?.length) setTopics(data.topics);
+      })
+      .catch(() => {});
+  }, []);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -101,10 +111,10 @@ export default function Home() {
 
           <div className="mt-12">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#7A7A7A] mb-4">
-              Try an example
+              Trending Debates
             </p>
             <div className="flex flex-wrap gap-2">
-              {EXAMPLE_QUESTIONS.map((q) => (
+              {topics.map((q) => (
                 <button
                   key={q}
                   onClick={() => handleExample(q)}
