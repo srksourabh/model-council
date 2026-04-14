@@ -47,10 +47,16 @@ async def stream_session(question: str, tier: str = "frontier"):
         raise HTTPException(status_code=400, detail="Question must be at least 5 characters")
 
     async def event_generator():
-        async for event in run_council_session(question, tier):
+        try:
+            async for event in run_council_session(question, tier):
+                yield {
+                    "event": event["event"],
+                    "data": json.dumps(event["data"]),
+                }
+        except Exception as e:
             yield {
-                "event": event["event"],
-                "data": json.dumps(event["data"]),
+                "event": "session_error",
+                "data": json.dumps({"error": str(e)}),
             }
 
     return EventSourceResponse(event_generator())

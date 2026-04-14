@@ -65,6 +65,10 @@ export function useCouncilSession() {
       const data = JSON.parse((e as MessageEvent).data);
       const roundNum = data.round;
       setState((prev) => {
+        // Prevent duplicate rounds (SSE can retry)
+        if (prev.rounds.some((r) => r.round === roundNum)) {
+          return { ...prev, status: `round_${roundNum}` as SessionState["status"] };
+        }
         const newRound: RoundData = { round: roundNum, responses: {}, complete: false };
         for (const role of ROLES) {
           newRound.responses[role] = { model: "", role, content: "", complete: false };
