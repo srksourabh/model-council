@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
                   model.id,
                   buildSystemPrompt(key, roundNum),
                   userContent,
-                  200,
+                  model.maxTokens,
                 )) {
                   chunks.push(text);
                 }
