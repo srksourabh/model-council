@@ -104,8 +104,8 @@ function SessionContent() {
         </GridSection>
       ))}
 
-      {/* Verdict */}
-      {(session.status === "verdict" || session.status === "complete") && (
+      {/* Verdict — show if we have verdict content OR status is verdict/complete */}
+      {(session.status === "verdict" || session.status === "complete" || session.verdict) && (
         <GridSection>
           <div className="col-span-12 lg:col-span-3">
             <SidebarLabel meta={session.status === "complete" ? "Final" : "Synthesizing..."}>

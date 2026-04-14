@@ -148,7 +148,12 @@ export function useCouncilSession() {
     });
 
     es.onerror = () => {
-      setState((prev) => ({ ...prev, status: "error", error: "Connection lost. Please try again." }));
+      // Don't overwrite a completed session — SSE naturally closes after session_complete
+      // and EventSource treats that as an "error"
+      setState((prev) => {
+        if (prev.status === "complete") return prev;
+        return { ...prev, status: "error", error: "Connection lost. Please try again." };
+      });
       es.close();
     };
 
