@@ -2,6 +2,7 @@ import { type NextRequest } from "next/server";
 import { COUNCIL_MODELS, ROLE_KEYS, type Tier } from "@/lib/council-config";
 import { buildSystemPrompt } from "@/lib/prompts";
 import { streamModelResponse } from "@/lib/openrouter";
+import { searchForContext } from "@/lib/web-search";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -23,7 +24,16 @@ export async function POST(request: NextRequest) {
   }
 
   const models = COUNCIL_MODELS[tier] || COUNCIL_MODELS.frontier;
-  const userContent = round === 1 ? question : `${question}\n\n${transcript}`;
+
+  let userContent: string;
+  if (round === 1) {
+    const briefing = await searchForContext(question);
+    userContent = briefing
+      ? `${question}\n\n${briefing}`
+      : question;
+  } else {
+    userContent = `${question}\n\n${transcript}`;
+  }
 
   const results = await Promise.all(
     ROLE_KEYS.map(async (key) => {

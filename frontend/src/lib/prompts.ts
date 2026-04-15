@@ -132,7 +132,16 @@ RULES:
 - Refer to members by role name, never by model name.`;
 
 export function buildSystemPrompt(roleKey: string, roundNum: number): string {
-  return ROLE_PROMPTS[roleKey].base + ROUND_PROMPTS[roundNum];
+  const dateStr = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const dateLine = `Today's date is ${dateStr}.\n\n`;
+  const contextNote = roundNum === 1
+    ? "\nIf a CONTEXT BRIEFING is provided with the topic, use that recent information to ground your arguments in current facts.\n"
+    : "";
+  return dateLine + ROLE_PROMPTS[roleKey].base + contextNote + ROUND_PROMPTS[roundNum];
 }
 
 interface RoundResponse {
