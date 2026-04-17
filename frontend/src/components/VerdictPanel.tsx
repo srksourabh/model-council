@@ -1,5 +1,7 @@
 "use client";
 
+import ReactMarkdown from "react-markdown";
+
 interface VerdictPanelProps {
   content: string;
   confidence: string;
@@ -32,7 +34,7 @@ export function VerdictPanel({ content, confidence, complete }: VerdictPanelProp
       </div>
       {content ? (
         <div className="prose prose-sm max-w-none text-[#444343] leading-relaxed">
-          <div className="whitespace-pre-wrap">{content}</div>
+          <ReactMarkdown>{content}</ReactMarkdown>
           {!complete && <span className="inline-block w-1.5 h-4 bg-[#1351AA] ml-0.5 animate-pulse" />}
         </div>
       ) : (
